@@ -2,7 +2,7 @@
 // A PID controller for single-kettle brewing. 
 // by Richard Oostindie
 //
-// Hevaliy based on:
+// heavilly based on:
 // Sous Vide Controller
 // Bill Earl - for Adafruit Industries
 //
