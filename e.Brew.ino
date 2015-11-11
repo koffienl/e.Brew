@@ -46,6 +46,7 @@ int ElapsedMin = 0;
 //double Setpoint;
 double Input;
 double Output;
+double sensor2;
 
 double TimerMargin = 0.5;
 
@@ -60,6 +61,7 @@ int HopPos = 1;
 
 double PIDsetpoint;
 
+int AlarmRaised = 0;
 
 int BoilTimer = 0;
 
@@ -69,9 +71,10 @@ volatile long onTime = 0;
 double Kp;
 double Ki;
 double Kd;
+double AlarmSetpoint;
 
 // EEPROM addresses for persisted data
-const int SpAddress = 0;
+const int AlarmSpAddress = 0;
 const int KpAddress = 8;
 const int KiAddress = 16;
 const int KdAddress = 24;
@@ -132,8 +135,7 @@ long lastLogTime = 0;
 // ************************************************
 // States for state machine
 // ************************************************
-//enum operatingState { OFF = 0, SETP, RUN, SETP1, SETP2, SETP3, SETP4, SETP5, SETP6, TUNE_P, TUNE_I, TUNE_D, AUTO, SET_TIMER1, SET_TIMER2, SET_TIMER3, SET_TIMER4, SET_TIMER5, SET_TIMER6, RESET, TIMERMARGIN, SellSensor};
-enum operatingState { OFF = 0, SETP, RUN, TUNE_P, TUNE_I, TUNE_D, AUTO, SET_TIMER, RESET, TIMERMARGIN, SellSensor, SETHOP};
+enum operatingState { OFF = 0, SETP, RUN, TUNE_P, TUNE_I, TUNE_D, AUTO, SET_TIMER, RESET, TIMERMARGIN, SellSensor, SETHOP, SETALARM};
 operatingState opState = OFF;
 
 // ************************************************
@@ -305,6 +307,9 @@ void loop()
    case SETHOP:
       Hop_Alarm();
       break;
+   case SETALARM:
+      SetAlarm();
+      break;
    }
 }
 
@@ -313,6 +318,7 @@ void loop()
 // ************************************************
 void Off()
 {
+    SaveParameters();
    myPID.SetMode(MANUAL);
    //lcd.setBacklight(0);
    digitalWrite(RelayPin, LOW);  // make sure it is off
@@ -856,7 +862,7 @@ void SelectKettleSensor()
       }
       if (buttons & BUTTON_RIGHT)
       {
-         opState = OFF;
+         opState = SETALARM;
          return;
       }
       if (buttons & BUTTON_UP)
@@ -898,6 +904,50 @@ void SelectKettleSensor()
    }
 }
 
+void SetAlarm()
+{
+   lcd.print(F("Set overheat"));
+
+   uint8_t buttons = 0;
+   while(true)
+   {
+      buttons = ReadButtons();
+      float increment = 1;
+      if (buttons & BUTTON_SHIFT)
+      {
+        increment *= 10;
+      }
+      if (buttons & BUTTON_LEFT)
+      {
+         opState = SellSensor;
+         return;
+      }
+      if (buttons & BUTTON_RIGHT)
+      {
+         opState = OFF;
+         return;
+      }
+      if (buttons & BUTTON_UP)
+      {
+         AlarmSetpoint += increment;
+         delay(200);
+      }
+      if (buttons & BUTTON_DOWN)
+      {
+         AlarmSetpoint -= increment;
+         delay(200);
+      }
+      if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
+      {
+         opState = OFF;
+         return;
+      }
+      lcd.setCursor(0,1);
+      lcd.print(AlarmSetpoint);
+      lcd.print(" ");
+      DoControl();
+   }
+}
 
 
 
@@ -910,6 +960,7 @@ void SelectKettleSensor()
 // ************************************************
 void Run()
 {
+  AlarmRaised = 0;
   // 2 short beeps for starting program
   buzz(buzzerPin, NOTE_C7, 200, 2);
   //delay(100);
@@ -935,7 +986,6 @@ void Run()
    lcd.write(1);
    lcd.print(F("C"));
 
-   SaveParameters();
    myPID.SetTunings(Kp,Ki,Kd);
 
    uint8_t buttons = 0;
@@ -1095,6 +1145,13 @@ void Run()
           lcd.setCursor(15, 1);
           lcd.write(3);
       }
+      CheckAlarm();
+      if(AlarmRaised == 1)
+      {
+        opState = OFF;
+        return;
+      }
+
 
       delay(100);
    }
@@ -1143,8 +1200,8 @@ void DoControl()
   // Read the input:
   if (sensors.isConversionAvailable(0))
   {
-    if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); }
-    if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); }
+    if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); sensor2 = sensors.getTempC(tempSensor2); }
+    if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); sensor2 = sensors.getTempC(tempSensor1); }
     sensors.requestTemperatures(); // prime the pump for the next one - but don't wait
   }
   
@@ -1267,6 +1324,11 @@ uint8_t ReadButtons()
 // ************************************************
 void SaveParameters()
 {
+   if (AlarmSetpoint != EEPROM_readDouble(AlarmSpAddress))
+   {
+      EEPROM_writeDouble(AlarmSpAddress, AlarmSetpoint);
+   }
+
    if (Kp != EEPROM_readDouble(KpAddress))
    {
       EEPROM_writeDouble(KpAddress, Kp);
@@ -1287,16 +1349,16 @@ void SaveParameters()
 void LoadParameters()
 {
   // Load from EEPROM
-   //Setpoint = EEPROM_readDouble(SpAddress);
+   AlarmSetpoint = EEPROM_readDouble(AlarmSpAddress);
    Kp = EEPROM_readDouble(KpAddress);
    Ki = EEPROM_readDouble(KiAddress);
    Kd = EEPROM_readDouble(KdAddress);
    
    // Use defaults if EEPROM values are invalid
-   //if (isnan(Setpoint))
-   //{
-     //Setpoint = 60;
-   //}
+   if (isnan(AlarmSetpoint))
+   {
+      AlarmSetpoint = 60;
+   }
    if (isnan(Kp))
    {
      Kp = 850;
@@ -1318,24 +1380,24 @@ void Reset()
     TmPos = 1;    
     HopPos = 1;    
 
-    for (int i = 0; i < 6; ++i)
+    for (int i = 1; i < 7; ++i)
     {
-      Setpoint[i] == 0;
+      Setpoint[i] = 0;
     }
 
-    for (int i = 0; i < 6; ++i)
+    for (int i = 1; i < 7; ++i)
     {
-      timer[i] == 0;
+      timer[i] = 0;
     }
 
-    for (int i = 0; i < 6; ++i)
+    for (int i = 1; i < 7; ++i)
     {
-      hop[i] == 0;
+      hop[i] = 0;
     }
 
-    buzz(buzzerPin, NOTE_C7, 100,2);
     lcd.setCursor(0,1);
     lcd.print(" Memory cleared");
+    buzz(buzzerPin, NOTE_C7, 100,2);
     delay(3000);  // Splash screen
 }
 
@@ -1388,4 +1450,37 @@ void buzz(int targetPin, long frequency, long length, int repeats) {
   delay(100);
   }
  
+}
+void CheckAlarm()
+{
+    uint8_t buttons = 0;
+    float tTempInput;
+    if(IntKettleSensor == 1) {  tTempInput = sensors.getTempC(tempSensor2); }
+    if(IntKettleSensor == 2) {  tTempInput = sensors.getTempC(tempSensor1); }
+    sensors.requestTemperatures();
+    int TempInput = tTempInput;
+    int ttAlarmSetpoint = AlarmSetpoint;
+
+  if (TempInput >= ttAlarmSetpoint)
+  {
+      AlarmRaised = 1;
+      digitalWrite(RelayPin, LOW);  // make sure it is off
+      opState = OFF;
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(F("!!!!Overheat!!!!"));
+      lcd.setCursor(0, 1);
+      lcd.print(F("down to reset"));
+
+      while(!buttons)
+      {
+        buttons = ReadButtons();
+        buzz(buzzerPin, NOTE_C7, 300,1);
+        if (buttons == BUTTON_DOWN)
+        {
+          //opState = OFF;
+          return;
+        }
+      }  
+  }
 }
