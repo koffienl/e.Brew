@@ -22,9 +22,9 @@ This controller was build to control the heating of a single kettle for homebrew
 First thing after booting up is checking for a DS18B20 sensor. If none is found, a alarm will sound and the display will show a error. Running the program without a working DS18B20 sensor is not possible.
 After bootup you are in the "e.Brew Ready" screen, the home/off position. From here you can navigate to all menu's using the keaypad buttons.
 
-UP:     Mash/boil/hop menu<br />
+UP:     Mash menu<br />
 Here you can set up to 6 temperatures with 6 timers and 6 hop alarms. You enter this menu on 'Temperatur 1'. Use the UP and DOWN buttons to increase/decrease the value. Use SELECT and UP or DOWN simultaneously to make jumps of 10's. Use the LEFT and RICHT buttons to move forward and backward in the menu. Selecting LEFT on the first item will bring you back to home, selecting RIGHT on the last item will bring you also back to home. Every step has a 10 minute timeout, after that you will switch back to home menu (settings are saved).<br />
-There are some rules for the temperatures/timers/hop:
+There are some rules for the temperature/timer/hop submenus:
 - Next temperature step is allways at least 1 degree more then previous temperaturem you can't go lower
 - After 99 degress the next step is 'Boil'
 - Boil is allways the last temperature slot
@@ -43,7 +43,11 @@ You can change the following settings:
 - Select temperature sensor. When more then 1 temperature sensor is connected, you can select the sensor for in the wort. Use the UP and DOWN buttons to select the correct sensor based on temperature reading. The other sensor is automaticly used for overhating alarm.
 - Set overheat (Set the temperature for overheat alarm. When this temperature is reached a continuous alarm will sound and heating will be cut off. Default value : 60 degrees). 
 
-
 LEFT:   Clear memory<br />
+This will clear all temperature/time/hop settings so far, including current positions of runned programs. Thiw sill NOT reset the values from the setup menu. After clearing memory you will hear 2 beeps.
+
 RIGHT:  Start program<br />
+This will start the the program with values from the Mash menu. You can't start the program with a working DS18B20 sensor or at least 1 temperature and 1 timer. Pressing LEFT during the program will bring you back to home. Press SELECT and RIGHT together for autotune.
+
 SELECT: Show current temperature<br />
+This will continuous show the temperarature of the connected temperatues. Press LEFT to get back to home.
