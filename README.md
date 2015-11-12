@@ -21,8 +21,13 @@ This controller was build to control the heating of a single kettle for homebrew
 # Usage
 First thing after booting up is checking for a DS18B20 sensor. If none is found, a alarm will sound and the display will show a error. Running the program without a working DS18B20 sensor is not possible.
 After bootup you are in the "e.Brew Ready" screen, the home/off position. From here you can navigate to all menu's using the keaypad buttons.
+
 UP:     Mash/boil/hop menu
+
 DOWN:   Setup menu
+
 Left:   Clear memory
+
 Right:  Start program
+
 Select: Show current temperature
