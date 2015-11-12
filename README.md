@@ -23,7 +23,6 @@ First thing after booting up is checking for a DS18B20 sensor. If none is found,
 After bootup you are in the "e.Brew Ready" screen, the home/off position. From here you can navigate to all menu's using the keaypad buttons.
 
 UP:     Mash/boil/hop menu
-
 DOWN:   Setup menu
 
 Left:   Clear memory
