@@ -23,7 +23,27 @@ First thing after booting up is checking for a DS18B20 sensor. If none is found,
 After bootup you are in the "e.Brew Ready" screen, the home/off position. From here you can navigate to all menu's using the keaypad buttons.
 
 UP:     Mash/boil/hop menu<br />
+Here you can set up to 6 temperatures with 6 timers and 6 hop alarms. You enter this menu on 'Temperatur 1'. Use the UP and DOWN buttons to increase/decrease the value. Use SELECT and UP or DOWN simultaneously to make jumps of 10's. Use the LEFT and RICHT buttons to move forward and backward in the menu. Selecting LEFT on the first item will bring you back to home, selecting RIGHT on the last item will bring you also back to home. Every step has a 10 minute timeout, after that you will switch back to home menu (settings are saved).<br />
+There are some rules for the temperatures/timers/hop:
+- Next temperature step is allways at least 1 degree more then previous temperaturem you can't go lower
+- After 99 degress the next step is 'Boil'
+- Boil is allways the last temperature slot
+- Each time slot is at least 1 minute
+- You can only use hopalarms when the last temperaturs is Boil
+- Next hop alarm is allways at least 1 minute after the last alarm
+- First hop alarm can't be higher then boil time
+
 DOWN:   Setup menu<br />
-Left:   Clear memory<br />
-Right:  Start program<br />
-Select: Show current temperature<br />
+Here you can configure settings that are stored in EEPROM. Use the UP and DOWN buttons to increase/decrease the value. Use SELECT and UP or DOWN simultaneously to make jumps of 10's. Use the LEFT and RICHT buttons to move forward and backward in the menu. Selecting LEFT on the first item will bring you back to home, selecting RIGHT on the last item will bring you also back to home. Every step has a 10 minute timeout, after that you will switch back to home menu (settings are saved).<br />
+You can change the following settings:
+- Timer margin (offset for starting mashtime before reaching setpoint. Default value: 0,50 degree. When the setpoint is set to 50 degrees, it will start counting the minuts at 49.5 degrees).
+- Set Kp (value for PID tuning. Default value : 850)
+- Set Ki (value for PID tuning. Default value : 0.5)
+- Set Kd (value for PID tuning. Default value : 0.1)
+- Select temperature sensor. When more then 1 temperature sensor is connected, you can select the sensor for in the wort. Use the UP and DOWN buttons to select the correct sensor based on temperature reading. The other sensor is automaticly used for overhating alarm.
+- Set overheat (Set the temperature for overheat alarm. When this temperature is reached a continuous alarm will sound and heating will be cut off. Default value : 60 degrees). 
+
+
+LEFT:   Clear memory<br />
+RIGHT:  Start program<br />
+SELECT: Show current temperature<br />
