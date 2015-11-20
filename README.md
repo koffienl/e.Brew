@@ -47,7 +47,7 @@ LEFT:   Clear memory<br />
 This will clear all temperature/time/hop settings so far, including current positions of runned programs. Thiw sill NOT reset the values from the setup menu. After clearing memory you will hear 2 beeps.
 
 RIGHT:  Start program<br />
-This will start the the program with values from the Mash menu. You can't start the program with a working DS18B20 sensor or at least 1 temperature and 1 timer. Pressing LEFT during the program will bring you back to home. Press SELECT and RIGHT together for autotune.
+This will start the the program with values from the Mash menu. You can't start the program with a working DS18B20 sensor or at least 1 temperature and 1 timer. Pressing LEFT during the program will bring you back to home. Press SELECT and RIGHT together for autotune, press RIGHT and LEFT simultaneously to display optional second temperature sensor (press RIGHT and LEFT again to remove).
 
 SELECT: Show current temperature<br />
 This will continuous show the temperarature of the connected temperatues. Press LEFT to get back to home.
