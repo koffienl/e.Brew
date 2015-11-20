@@ -10,99 +10,30 @@
 // by Brett Beauregard
 //------------------------------------------------------------------
 
-// PID Library
+// PID & PID Autotune
 #include <PID_v1.h>
 #include <PID_AutoTune_v0.h>
-
-// Libraries for the Adafruit RGB/LCD Shield
-#include <Wire.h>
-#include <utility/Adafruit_MCP23017.h>
-#include <Adafruit_RGBLCDShield.h>
-
-
-// Libraries for the DS18B20 Temperature Sensor
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
-// So we can save and retrieve settings
-#include <EEPROM.h>
-
-// Defin timers
-#include <elapsedMillis.h>
-elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
-unsigned int interval = 60000; // 1 minute interval
-int ElapsedMin = 0;
-
-// Pin definitions
-#define RelayPin 7
-#define buzzerPin 3
-//#define buzzerPin 3
-
-// One-Wire Temperature Sensor
-#define ONE_WIRE_BUS 2
-
-// PID Variables, timers, setpoints and constants
-//Define Variables we'll be connecting to
-//double Setpoint;
 double Input;
 double Output;
-double sensor2;
-
-double TimerMargin = 0.5;
-
-int stage = 0;
-
-double Setpoint[6] = {0,0,0,0,0,0};
-int SpPos = 1;
-double timer[6] = {0,0,0,0,0,0};
-int TmPos = 1;
-double hop[6] = {0,0,0,0,0,0};
-int HopPos = 1;
-
-double PIDsetpoint;
-
-int AlarmRaised = 0;
-
-int BoilTimer = 0;
-
-volatile long onTime = 0;
-
-// pid tuning parameters
 double Kp;
 double Ki;
 double Kd;
-double AlarmSetpoint;
-
-// EEPROM addresses for persisted data
-const int AlarmSpAddress = 0;
-const int KpAddress = 8;
-const int KiAddress = 16;
-const int KdAddress = 24;
-
-//Specify the links and initial tuning parameters
-PID myPID(&Input, &Output, &PIDsetpoint, Kp, Ki, Kd, DIRECT);
-
-// 10 second Time Proportional Output window
-int WindowSize = 10000; 
+double PIDsetpoint;
+PID myPID(&Input, &Output, &PIDsetpoint, Kp, Ki, Kd, DIRECT); //Specify the links and initial tuning parameters
+int WindowSize = 10000; // 10 second Time Proportional Output window
 unsigned long windowStartTime;
-
-// ************************************************
-// Auto Tune Variables and constants
-// ************************************************
 byte ATuneModeRemember=2;
-
 double aTuneStep=500;
 double aTuneNoise=1;
 unsigned int aTuneLookBack=20;
-
 boolean tuning = false;
-
 PID_ATune aTune(&Input, &Output);
 
-// ************************************************
-// DiSplay Variables and constants
-// ************************************************
 
+// Adafruit RGB/LCD Shield
+#include <Wire.h>
+#include <utility/Adafruit_MCP23017.h>
+#include <Adafruit_RGBLCDShield.h>
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 // These #defines make it easy to set the backlight color
 #define RED 0x1
@@ -112,22 +43,82 @@ Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 #define BLUE 0x4
 #define VIOLET 0x5
 #define WHITE 0x7
-
 #define BUTTON_SHIFT BUTTON_SELECT
-
 unsigned long lastInput = 0; // last button press
+byte degreeSMALL[8] = {B01000, B10100, B01000, B00111, B01000, B01000, B01000, B00111};         //degree c symbol
+byte SP_Symbol[8] = {B11100, B10000, B11100, B00111, B11101, B00111, B00100, B00100};           //SP Symbol
+byte degree[8] = {B00110,B01001, B01001, B00110, B00000,B00000, B00000, B00000 };               //degree c symbol 2
+byte barchar[8] = {B11111,B11111,B11111,B11111,B11111,B11111,B11111,B11111};                    //full bar symbol
+byte hourglasschar[8] = {0b11111,0b10001,0b01110,0b00100,0b01010,0b10001,0b11111,0b00000};      //hourglass symbol
+byte HeatONOFF[8] = {B00000, B01010, B01010, B01110, B01110, B01010, B01010, B00000};           //Heat symbol
+byte RevHeatONOFF[8] = {B11111, B10101, B10101, B10001, B10001, B10101, B10101, B11111};        //reverse heat symbol
+byte thermometer[8] = {B00100,B01010,B01010,B01110,B01110,B11111,B11111,B01110};                //thermometer symbol
 
-// Special characters for LCD
+
+//DS18B20 Temperature Sensor
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#define ONE_WIRE_BUS 2
+double sensor2;
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+DeviceAddress tempSensor1, tempSensor2;
+String StrKettleSensor;
+int IntKettleSensor;
 
 
-byte degreeSMALL[8] = {B01000, B10100, B01000, B00111, B01000, B01000, B01000, B00111};         // degree c symbol
-byte SP_Symbol[8] = {B11100, B10000, B11100, B00111, B11101, B00111, B00100, B00100};                //  SP Symbol
-byte degree[8] = {B00110,B01001, B01001, B00110, B00000,B00000, B00000, B00000 };                       // define the degree symbol 
-byte barchar[8] = {B11111,B11111,B11111,B11111,B11111,B11111,B11111,B11111};                            // icon for bar
-byte hourglasschar[8] = {0b11111,0b10001,0b01110,0b00100,0b01010,0b10001,0b11111,0b00000};              //icon for hourglass
-byte HeatONOFF[8] = {B00000, B01010, B01010, B01110, B01110, B01010, B01010, B00000};  // [5] HEAT symbol
-byte RevHeatONOFF[8] = {B11111, B10101, B10101, B10001, B10001, B10101, B10101, B11111};  // [6] reverse HEAT symbol
-byte thermometer[8] = {B00100,B01010,B01010,B01110,B01110,B11111,B11111,B01110};           //icon for termometer
+//EEPROM
+#include <EEPROM.h>
+const int AlarmSpAddress = 0;
+const int KpAddress = 8;
+const int KiAddress = 16;
+const int KdAddress = 24;
+const int TMarginAddress = 32;
+
+
+// Timer stuff
+#include <elapsedMillis.h>
+elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
+unsigned int interval = 60000; // 1 minute interval
+int ElapsedMin = 0;
+
+
+// Buzzer
+#define buzzerPin 3
+#define NOTE_C7  2093
+#define NOTE_E7  2637
+#define NOTE_G7  3136
+
+
+
+// Pin definitions
+#define RelayPin 7
+
+
+
+// Variables
+
+double TimerMargin;
+int stage = 0;
+double Setpoint[6] = {0,0,0,0,0,0};
+int SpPos = 1;
+double timer[6] = {0,0,0,0,0,0};
+int TmPos = 1;
+double hop[6] = {0,0,0,0,0,0};
+int HopPos = 1;
+
+int AlarmRaised = 0;
+int BoilTimer = 0;
+volatile long onTime = 0;
+
+double AlarmSetpoint;
+
+
+
+// ************************************************
+// DiSplay Variables and constants
+// ************************************************
+
 
 const int logInterval = 10000; // log every 10 seconds
 long lastLogTime = 0;
@@ -142,16 +133,6 @@ operatingState opState = OFF;
 // Sensor Variables and constants
 
 
-// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
-OneWire oneWire(ONE_WIRE_BUS);
-
-// Pass our oneWire reference to Dallas Temperature. 
-DallasTemperature sensors(&oneWire);
-
-// arrays to hold device address
-DeviceAddress tempSensor1, tempSensor2;
-String StrKettleSensor;
-int IntKettleSensor;
 
 
 
@@ -159,7 +140,7 @@ int IntKettleSensor;
  * Public Constants for notes
  *************************************************/
  
-#define NOTE_C7  2093
+
 
 
 // ************************************************
@@ -168,9 +149,16 @@ int IntKettleSensor;
 void setup()
 {
    Serial.begin(115200);
+   // Initialize the PID and related variables
+   LoadParameters();
+   myPID.SetTunings(Kp,Ki,Kd);
 
+   myPID.SetSampleTime(1000);
+   myPID.SetOutputLimits(0, WindowSize);
+
+/*
   String StrKettleSensor;
-  for (int i = 33; i < 34; ++i)
+  for (int i = 41; i < 42; ++i)
   {
     if (EEPROM.read(i) != 0) { StrKettleSensor += char(EEPROM.read(i));  }
   }
@@ -182,10 +170,8 @@ void setup()
   {
     IntKettleSensor = StrKettleSensor.toInt();
   }
+*/
 
-
-// for ESP only: first=SDA second=SCL
-//Wire.begin(12,5);
 
   pinMode(3, OUTPUT);//buzzer
    // Initialize Relay Control:
@@ -228,12 +214,6 @@ void setup()
     sensors.setResolution(tempSensor1, 12);
    sensors.setWaitForConversion(false);
 
-   // Initialize the PID and related variables
-   LoadParameters();
-   myPID.SetTunings(Kp,Ki,Kd);
-
-   myPID.SetSampleTime(1000);
-   myPID.SetOutputLimits(0, WindowSize);
 
   // Run timer2 interrupt every 15 ms 
   TCCR2A = 0;
@@ -318,44 +298,39 @@ void loop()
 // ************************************************
 void Off()
 {
-    SaveParameters();
-   myPID.SetMode(MANUAL);
-   //lcd.setBacklight(0);
-   digitalWrite(RelayPin, LOW);  // make sure it is off
-   lcd.print(F("     e.Brew"));
-   lcd.setCursor(0, 1);
-   lcd.print(F("     READY"));
-   uint8_t buttons = 0;
+  myPID.SetMode(MANUAL);
+  digitalWrite(RelayPin, LOW);  // make sure it is off
+  lcd.print(F("     e.Brew"));
+  lcd.setCursor(0, 1);
+  lcd.print(F("     READY"));
+  uint8_t buttons = 0;
 
+  while(!buttons)
+  {
+    buttons = ReadButtons();
 
+    if (buttons == BUTTON_RIGHT && Setpoint[1] != 0 && timer[1] != 0 && sensors.getDeviceCount() >= 1) // Run program
+    {
+      // Prepare to transition to the RUN state
+      sensors.requestTemperatures(); // Start an asynchronous temperature reading
+      //turn the PID on
+      myPID.SetMode(AUTOMATIC);
+      windowStartTime = millis();
+      opState = RUN; // start control
+    }
+    if (buttons == BUTTON_SELECT) // Continuously show temperature 
+    {
+      lcd.clear();
+      ShowTemp();
+    }
 
-
-   while(!buttons)
-   {
-      buttons = ReadButtons();
-
-      if (buttons == BUTTON_RIGHT) // Run program
-      {
-        // Prepare to transition to the RUN state
-        sensors.requestTemperatures(); // Start an asynchronous temperature reading
-        //turn the PID on
-        myPID.SetMode(AUTOMATIC);
-        windowStartTime = millis();
-        opState = RUN; // start control
-      }
-      if (buttons == BUTTON_SELECT) // Continuously show temperature 
-      {
-        lcd.clear();
-        ShowTemp();
-      }
-
-      if (buttons == BUTTON_UP) // Timer wizzard
-      {
-        lcd.clear();
-        SpPos = 1;
-        Tune_Sp();
-      }
-      if (buttons == BUTTON_DOWN) // Config wizzard
+    if (buttons == BUTTON_UP) // Timer wizzard
+    {
+      lcd.clear();
+      SpPos = 1;
+      Tune_Sp();
+    }
+    if (buttons == BUTTON_DOWN) // Config wizzard
       {
         lcd.clear();
         Tune_TimerMargin();
@@ -613,19 +588,9 @@ void Hop_Alarm()
 
 
 
-
-// ************************************************
-// Proportional Tuning State
-// UP/DOWN to change Kp
-// RIGHT for Ki
-// LEFT for setpoint
-// SHIFT for 10x tuning
-// ************************************************
-
 void Tune_TimerMargin()
 {
    delay(200); // delay for buttons
-   //lcd.setBacklight(TEAL);
    lcd.print(F("Timer margin"));
 
    uint8_t buttons = 0;
@@ -640,8 +605,10 @@ void Tune_TimerMargin()
       }
       if (buttons & BUTTON_LEFT)
       {
-         opState = OFF;
-         return;
+        //opState = OFF;
+        //return;
+        SaveParameters();
+        return;
       }
       if (buttons & BUTTON_RIGHT)
       {
@@ -660,7 +627,9 @@ void Tune_TimerMargin()
       }
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       lcd.setCursor(0,1);
@@ -708,7 +677,9 @@ void TuneP()
       }
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       lcd.setCursor(0,1);
@@ -762,7 +733,9 @@ void TuneI()
       }
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       lcd.setCursor(0,1);
@@ -772,13 +745,6 @@ void TuneI()
    }
 }
 
-// ************************************************
-// Derivative Tuning State
-// UP/DOWN to change Kd
-// RIGHT for setpoint
-// LEFT for Ki
-// SHIFT for 10x tuning
-// ************************************************
 void TuneD()
 {
    //lcd.setBacklight(TEAL);
@@ -815,7 +781,9 @@ void TuneD()
       }
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       lcd.setCursor(0,1);
@@ -828,27 +796,8 @@ void TuneD()
 
 void SelectKettleSensor()
 {
-    float temp1 = sensors.getTempC(tempSensor1);
-    float temp2 = sensors.getTempC(tempSensor2);
-    sensors.requestTemperatures(); // prime the pump for the next one - but don't wait
-
-
-    lcd.setCursor(0,0);
-    lcd.print(temp1);
-    lcd.setCursor(0,1);
-    lcd.print(temp2);
-
-    if (IntKettleSensor == 1)
-    {
-          lcd.setCursor(15, 0);
-          lcd.write(4);
-    }
-
-    if (IntKettleSensor == 2)
-    {
-          lcd.setCursor(15, 1);
-          lcd.write(4);
-    }
+    int NumSens = sensors.getDeviceCount();
+    //NumSens = 2;
 
    uint8_t buttons = 0;
    while(true)
@@ -865,7 +814,7 @@ void SelectKettleSensor()
          opState = SETALARM;
          return;
       }
-      if (buttons & BUTTON_UP)
+      if (buttons & BUTTON_UP && NumSens >= 2)
       {
           lcd.setCursor(15, 0);
           lcd.write(4);
@@ -874,13 +823,12 @@ void SelectKettleSensor()
           IntKettleSensor = 1;
           StrKettleSensor = "1";
 
-    for (int i = 0; i < StrKettleSensor.length(); ++i)
-    {
-      EEPROM.write(33, StrKettleSensor[i]);
-    }
-
+          //for (int i = 0; i < StrKettleSensor.length(); ++i)
+          //{
+            //EEPROM.write(41, StrKettleSensor[i]);
+          //}
       }
-      if (buttons & BUTTON_DOWN)
+      if (buttons & BUTTON_DOWN && NumSens >= 2)
       {
           lcd.setCursor(15, 1);
           lcd.write(4);
@@ -889,15 +837,67 @@ void SelectKettleSensor()
           IntKettleSensor = 2;
           StrKettleSensor = "2";
 
-    for (int i = 0; i < StrKettleSensor.length(); ++i)
+          //for (int i = 0; i < StrKettleSensor.length(); ++i)
+          //{
+            //EEPROM.write(41, StrKettleSensor[i]);
+          //}
+      }
+
+    if (NumSens == 0)
     {
-      EEPROM.write(33, StrKettleSensor[i]);
+      lcd.setCursor(0,0);
+      lcd.print(F("Sensor Error"));
     }
 
+    if (NumSens == 1)
+    {
+      float temp1 = sensors.getTempC(tempSensor1);
+      sensors.requestTemperatures(); 
+      lcd.setCursor(0,0);
+      lcd.print(temp1);
+
+      IntKettleSensor = 1;
+      lcd.setCursor(15, 0);
+      lcd.write(4);
+
+      IntKettleSensor = 1;
+      StrKettleSensor = "1";
+
+      //for (int i = 0; i < StrKettleSensor.length(); ++i)
+      //{
+      //  EEPROM.write(33, StrKettleSensor[i]);
+      //}
+    }
+
+    if (NumSens >= 2)
+    {
+      float temp1 = sensors.getTempC(tempSensor1);
+      float temp2 = sensors.getTempC(tempSensor2);
+      sensors.requestTemperatures(); 
+      lcd.setCursor(0,0);
+      lcd.print(temp1);
+      lcd.setCursor(0,1);
+      lcd.print(temp2);
+
+      if (IntKettleSensor == 1)
+      {
+        lcd.setCursor(15, 0);
+        lcd.write(4);
       }
+
+      if (IntKettleSensor == 2)
+      {
+        lcd.setCursor(15, 1);
+        lcd.write(4);
+      }
+    }
+
+      
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       DoControl();
@@ -924,7 +924,9 @@ void SetAlarm()
       }
       if (buttons & BUTTON_RIGHT)
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       if (buttons & BUTTON_UP)
@@ -939,7 +941,9 @@ void SetAlarm()
       }
       if ((millis() - lastInput) > 10000)  // return to RUN after 3 seconds idle
       {
-         opState = OFF;
+         //opState = OFF;
+         //return;
+         SaveParameters();
          return;
       }
       lcd.setCursor(0,1);
@@ -960,14 +964,14 @@ void SetAlarm()
 // ************************************************
 void Run()
 {
-  AlarmRaised = 0;
   // 2 short beeps for starting program
   buzz(buzzerPin, NOTE_C7, 200, 2);
-  //delay(100);
-  //buzz(buzzerPin, NOTE_C7, 200);
-  //delay(100);
 
-  int spin = 1;
+  AlarmRaised = 0;
+  int IntTimerMargin = TimerMargin;
+
+  int NumSens = sensors.getDeviceCount();
+  int ShowSensor2 = 0;
 
   int TempReached = 0;
   if (stage == 0)
@@ -975,7 +979,6 @@ void Run()
     stage = 1;
     SpPos = 1;
     TmPos = 1;
-    //timer = timer[TmPos];
     ElapsedMin = timer[TmPos];
     timeElapsed = 0;
     PIDsetpoint = Setpoint[SpPos];
@@ -999,11 +1002,17 @@ void Run()
       }
 
       buttons = ReadButtons();
-      if ((buttons & BUTTON_SHIFT) 
-         && (buttons & BUTTON_RIGHT) 
-         && (abs(Input - Setpoint[SpPos]) < 0.5))  // Should be at steady-state
+      if ((buttons & BUTTON_SHIFT) && (buttons & BUTTON_RIGHT) && (abs(Input - Setpoint[SpPos]) < 0.5))  // Should be at steady-state
       {
          StartAutoTune();
+      }
+      else if ((buttons & BUTTON_LEFT) && (buttons & BUTTON_RIGHT) && ShowSensor2 == 1) 
+      {
+        ShowSensor2 = 0;
+      }
+      else if ((buttons & BUTTON_LEFT) && (buttons & BUTTON_RIGHT) && ShowSensor2 == 0) 
+      {
+        ShowSensor2 = 1;
       }
       else if (buttons & BUTTON_LEFT)
       {
@@ -1011,9 +1020,14 @@ void Run()
         return;
       }
       
-      int TempInput = Input;
-      int TempSetpoint = Setpoint[SpPos];
-      if (TempInput >= TempSetpoint && TempReached == 0)
+      //int TempInput = Input;
+      //int TempSetpoint = Setpoint[SpPos];
+      float FloatInput = Input;
+      float FloatSetpoint = Setpoint[SpPos];
+      float FloatTimerMargin = TimerMargin;
+      
+      //if ( TempInput >= (TempSetpoint - IntTimerMargin) && TempReached == 0)
+      if ( (FloatInput*1000) >= ( (FloatSetpoint*1000) - (FloatTimerMargin*1000) ) && TempReached == 0)
       {
         // first time temp reached. Set var and reset timer
         TempReached = 1;
@@ -1032,7 +1046,8 @@ void Run()
       }
       
 
-      if (TempInput >= TempSetpoint || TempReached == 1)
+      //if (TempInput >= TempSetpoint || TempReached == 1)
+      if ( (FloatInput*1000) >= (FloatSetpoint*1000) || TempReached == 1)
       {
         if (Setpoint[SpPos] < 100) { lcd.setCursor(9,0); }
         if (Setpoint[SpPos] >= 100) { lcd.setCursor(10,0); }
@@ -1055,6 +1070,16 @@ void Run()
             opState = OFF;
             return;
           }
+
+          if (Setpoint[(SpPos+1)] != 0 && timer[(TmPos+1)] != 0 && stage <= 5)
+          {
+            stage++;
+            SpPos++;
+            TmPos++;
+            TempReached = 0;
+            PIDsetpoint = Setpoint[SpPos];
+          }
+          /*
           if (stage == 5)
           {
             ElapsedMin = timer[6];
@@ -1100,6 +1125,7 @@ void Run()
             TempReached = 0;
             PIDsetpoint = Setpoint[2];
           }
+          */
           lcd.setCursor(1,0);
           lcd.print(Setpoint[SpPos]);
         }
@@ -1116,7 +1142,7 @@ void Run()
         {
           if(IntKettleSensor == 1) Input = sensors.getTempC(tempSensor1);
           if(IntKettleSensor == 2) Input = sensors.getTempC(tempSensor2);
-          sensors.requestTemperatures(); // prime the pump for the next one - but don't wait
+          sensors.requestTemperatures(); 
         }
       }
 
@@ -1126,8 +1152,19 @@ void Run()
       lcd.write(1);
       lcd.print(F("C"));
       
-      lcd.setCursor(10,1);
-      lcd.print(F("      "));
+        //lcd.setCursor(10,1);
+        //lcd.print(ShowSensor2);
+      if (ShowSensor2 == 0)
+      {
+        lcd.setCursor(9,1);
+        lcd.print(F("      "));
+      }
+      if (ShowSensor2 == 1 && NumSens >= 2)
+      {
+        lcd.setCursor(9, 1);
+        lcd.print(sensor2);
+        //lcd.print(F("      "));
+      }
       
       lcd.setCursor(14,0);
       if (tuning)
@@ -1145,6 +1182,11 @@ void Run()
           lcd.setCursor(15, 1);
           lcd.write(3);
       }
+      else
+      {
+          lcd.setCursor(15, 1);
+          lcd.print(" ");
+      }
       CheckAlarm();
       if(AlarmRaised == 1)
       {
@@ -1153,42 +1195,62 @@ void Run()
       }
 
 
-      delay(100);
    }
 }
 
 void ShowTemp()
 {
-   uint8_t buttons = 0;
-   while(true)
-   {
-      //setBacklight();  // set backlight based on state
-      buttons = ReadButtons();
-     if(buttons & BUTTON_LEFT)
-      {
-        opState = OFF;
-        return;
-      }
-      
-          lcd.setCursor(0,0);
-
-  // Read the input:
-  if (sensors.isConversionAvailable(0))
+  int NumSens = sensors.getDeviceCount();
+  //NumSens = 2;
+  
+  uint8_t buttons = 0;
+  while(true)
   {
-    if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); }
-    if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); }
-    sensors.requestTemperatures(); // prime the pump for the next one - but don't wait
-  }
+    buttons = ReadButtons();
+    if(buttons & BUTTON_LEFT)
+    {
+      opState = OFF;
+      return;
+    }
 
-
+    if (NumSens == 1)
+    {
+      if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); }
+      if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); }
+      sensors.requestTemperatures(); 
       lcd.setCursor(0,0);
       lcd.write(6);
       lcd.print(Input);
       lcd.write(1);
       lcd.print(F("C"));
-                  
+    }
+
+    if (NumSens >= 2)
+    {
+      if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); }
+      if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); }
+      sensors.requestTemperatures(); 
+      lcd.setCursor(0,0);
+      lcd.write(6);
+      lcd.print(Input);
+      lcd.write(1);
+      lcd.print(F("C"));
+      
+      if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor2); }
+      if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor1); }
+      sensors.requestTemperatures(); 
+      lcd.setCursor(0,1);
+      lcd.write(3);
+      lcd.print(Input);
+      lcd.write(1);
+      lcd.print(F("C"));
+    }
+
+    
+
+  }
+                 
       delay(100);
-   }
 }
 
 
@@ -1202,7 +1264,7 @@ void DoControl()
   {
     if(IntKettleSensor == 1) { Input = sensors.getTempC(tempSensor1); sensor2 = sensors.getTempC(tempSensor2); }
     if(IntKettleSensor == 2) { Input = sensors.getTempC(tempSensor2); sensor2 = sensors.getTempC(tempSensor1); }
-    sensors.requestTemperatures(); // prime the pump for the next one - but don't wait
+    sensors.requestTemperatures(); 
   }
   
   if (tuning) // run the auto-tuner
@@ -1341,6 +1403,26 @@ void SaveParameters()
    {
       EEPROM_writeDouble(KdAddress, Kd);
    }
+   if (TimerMargin != EEPROM_readDouble(TMarginAddress))
+   {
+      EEPROM_writeDouble(TMarginAddress, TimerMargin);
+   }
+
+    for (int i = 0; i < StrKettleSensor.length(); ++i)
+    {
+        EEPROM.write(41, StrKettleSensor[i]);
+    }
+
+   
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print(F("     e.Brew"));
+    lcd.setCursor(0,1);
+    lcd.print(" Settings saved");
+    delay(2000);  // Splash screen
+
+    opState = OFF;
+    //return;
 }
 
 // ************************************************
@@ -1353,6 +1435,20 @@ void LoadParameters()
    Kp = EEPROM_readDouble(KpAddress);
    Ki = EEPROM_readDouble(KiAddress);
    Kd = EEPROM_readDouble(KdAddress);
+   TimerMargin = EEPROM_readDouble(TMarginAddress);
+
+  for (int i = 41; i < 42; ++i)
+  {
+    if (EEPROM.read(i) != 0) { StrKettleSensor += char(EEPROM.read(i));  }
+  }
+  if(StrKettleSensor == "")
+  {
+    IntKettleSensor = 1;
+  }
+  else
+  {
+    IntKettleSensor = StrKettleSensor.toInt();
+  }   
    
    // Use defaults if EEPROM values are invalid
    if (isnan(AlarmSetpoint))
@@ -1371,6 +1467,11 @@ void LoadParameters()
    {
      Kd = 0.1;
    }  
+   if (isnan(TimerMargin))
+   {
+     TimerMargin = 0.5;
+   }  
+
 }
 
 void Reset()
@@ -1430,27 +1531,22 @@ double EEPROM_readDouble(int address)
 void buzz(int targetPin, long frequency, long length, int repeats) {
   for (int i = 0; i < repeats; ++i)
   {
-    
-  
-  //digitalWrite(13, HIGH);
-  long delayValue = 1000000 / frequency / 2; // calculate the delay value between transitions
-  //// 1 second's worth of microseconds, divided by the frequency, then split in half since
-  //// there are two phases to each cycle
-  long numCycles = frequency * length / 1000; // calculate the number of cycles for proper timing
-  //// multiply frequency, which is really cycles per second, by the number of seconds to
-  //// get the total number of cycles to produce
-  for (long i = 0; i < numCycles; i++) { // for the calculated length of time...
-    digitalWrite(targetPin, HIGH); // write the buzzer pin high to push out the diaphram
-    delayMicroseconds(delayValue); // wait for the calculated delay value
-    digitalWrite(targetPin, LOW); // write the buzzer pin low to pull back the diaphram
-    delayMicroseconds(delayValue); // wait again or the calculated delay value
+    long delayValue = 1000000 / frequency / 2; // calculate the delay value between transitions
+    //// 1 second's worth of microseconds, divided by the frequency, then split in half since
+    //// there are two phases to each cycle
+    long numCycles = frequency * length / 1000; // calculate the number of cycles for proper timing
+    //// multiply frequency, which is really cycles per second, by the number of seconds to
+    //// get the total number of cycles to produce
+    for (long i = 0; i < numCycles; i++) { // for the calculated length of time...
+      digitalWrite(targetPin, HIGH); // write the buzzer pin high to push out the diaphram
+      delayMicroseconds(delayValue); // wait for the calculated delay value
+      digitalWrite(targetPin, LOW); // write the buzzer pin low to pull back the diaphram
+      delayMicroseconds(delayValue); // wait again or the calculated delay value
+    }
+    delay(100);
   }
-  //digitalWrite(13, LOW);
-
-  delay(100);
-  }
- 
 }
+
 void CheckAlarm()
 {
     uint8_t buttons = 0;
@@ -1478,7 +1574,6 @@ void CheckAlarm()
         buzz(buzzerPin, NOTE_C7, 300,1);
         if (buttons == BUTTON_DOWN)
         {
-          //opState = OFF;
           return;
         }
       }  
